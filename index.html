@@ -706,13 +706,25 @@ function toggleStamp(act){
 
 /* ---------- photo pan & zoom ---------- */
 function curFit(){ return store.photofit[curMember] = store.photofit[curMember] || {s:1, x:0, y:0}; }
+function clampFit(f, zone, img){
+  // keep the photo covering the frame: never drag past its own edge
+  if (!img.naturalWidth || !zone.clientWidth) return;
+  const cover = Math.max(zone.clientWidth / img.naturalWidth, zone.clientHeight / img.naturalHeight);
+  const rw = img.naturalWidth * cover * f.s, rh = img.naturalHeight * cover * f.s;
+  const maxX = Math.max(0, (rw - zone.clientWidth) / 2 / zone.clientWidth * 100);
+  const maxY = Math.max(0, (rh - zone.clientHeight) / 2 / zone.clientHeight * 100);
+  f.x = Math.max(-maxX, Math.min(maxX, f.x));
+  f.y = Math.max(-maxY, Math.min(maxY, f.y));
+}
 function applyFit(img){
   const f = curFit();
   img.style.transform = `translate(${f.x}%,${f.y}%) scale(${f.s})`;
 }
 function nudgeFit(mut){
-  const f = curFit(); mut(f); save();
+  const f = curFit(); mut(f);
   const img = document.getElementById("photoImg");
+  if (img) clampFit(f, img.closest(".photozone"), img);
+  save();
   if (img) applyFit(img);
 }
 function bindPhotoPan(zone, img){
@@ -736,13 +748,14 @@ function bindPhotoPan(zone, img){
     const f = curFit();
     if (pts.size === 1 && startXY){
       moved = Math.max(moved, Math.hypot(e.clientX - startXY[0], e.clientY - startXY[1]));
-      f.x = Math.max(-45, Math.min(45, startFit.x + (e.clientX - startXY[0]) / zone.clientWidth * 100));
-      f.y = Math.max(-45, Math.min(45, startFit.y + (e.clientY - startXY[1]) / zone.clientHeight * 100));
+      f.x = startFit.x + (e.clientX - startXY[0]) / zone.clientWidth * 100;
+      f.y = startFit.y + (e.clientY - startXY[1]) / zone.clientHeight * 100;
     } else if (pts.size === 2 && startDist > 0){
       const a = [...pts.values()];
       const d = Math.hypot(a[0][0]-a[1][0], a[0][1]-a[1][1]);
       f.s = Math.max(0.4, Math.min(3, startFit.s * d / startDist));
     }
+    clampFit(f, zone, img);
     applyFit(img);
   });
   const end = e=>{
